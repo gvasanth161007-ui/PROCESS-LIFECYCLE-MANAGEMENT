@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Process Lifecycle Management</title>
+<style>
+:root{--bg:#EDF0F3;--ink:#14213D;--mut:#5B6678;--line:#D5DBE3;--NEW:#7A869A;--READY:#2F6FED;--RUNNING:#1F9D55;--WAITING:#C27F00;--SUSPENDED:#8A5CF6;--TERMINATED:#B4475B}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{background:var(--ink);color:#fff;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
+h1{font:600 22px Georgia,"Iowan Old Style",serif;margin:0}
+.hr{display:flex;align-items:center;gap:18px}
+.mono,.clk{font-family:ui-monospace,Menlo,Consolas,monospace}
+.clk{font-size:26px;font-weight:600;letter-spacing:.06em}
+header label{font-size:13px;cursor:pointer}
+nav{display:flex;background:#fff;border-bottom:1px solid var(--line);overflow-x:auto;padding:0 12px}
+nav button{border:0;background:none;padding:12px 14px;font:inherit;cursor:pointer;color:var(--mut);border-bottom:3px solid transparent;white-space:nowrap}
+nav button.on{color:var(--ink);border-color:var(--ink);font-weight:600}
+main{max-width:1100px;margin:0 auto;padding:18px}
+.pg{display:none}.pg.on{display:block}
+.card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:16px;margin-bottom:16px;overflow-x:auto}
+h2{font:600 18px Georgia,serif;margin:0 0 10px}h3{margin:0 0 4px;font-size:15px}
+p{margin:.3em 0}.mut{color:var(--mut)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
+.tile{border-left:5px solid var(--line);padding-left:10px}.tile b{display:block;font:600 28px ui-monospace,monospace}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:760px){.two{grid-template-columns:1fr}}
+.bd{color:#fff;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:600}
+.chip{display:inline-block;border:2px solid;border-radius:6px;padding:1px 8px;margin:2px;font:600 13px ui-monospace,monospace;cursor:pointer;background:#fff}
+.q{display:flex;flex-wrap:wrap;align-items:center;gap:2px;min-height:34px}.q i{color:var(--mut);font-style:normal}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{color:var(--mut);font-weight:600}
+button.a{font:inherit;font-size:12px;padding:3px 8px;margin:1px;border:1px solid var(--ink);background:#fff;color:var(--ink);border-radius:5px;cursor:pointer}
+button.a:hover{background:var(--ink);color:#fff}
+button.p{font:inherit;padding:8px 16px;border:0;border-radius:6px;background:var(--ink);color:#fff;cursor:pointer}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #2F6FED;outline-offset:1px}
+form{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;align-items:end}
+label.f{display:flex;flex-direction:column;font-size:13px;color:var(--mut);gap:3px}
+input{font:inherit;padding:7px;border:1px solid var(--line);border-radius:6px;color:var(--ink)}
+.cpu{border:3px solid var(--ink);border-radius:14px;padding:18px;text-align:center;background:#F7F9FB}
+.cpu.on{border-color:var(--RUNNING);box-shadow:0 0 0 5px #1F9D5522}
+.big{font-size:28px;font-weight:700}
+.bar{height:10px;background:var(--line);border-radius:5px;margin:10px 0 6px;overflow:hidden}.bar i{display:block;height:100%;background:var(--RUNNING);transition:width .5s}
+.row{display:flex;align-items:center;gap:10px;margin:6px 0;font-size:14px}.row span:first-child{width:100px}.row .bar{flex:1;margin:0;height:14px}
+.vg{display:grid;grid-template-columns:1fr 26px 1fr 26px 1fr 26px 1fr;gap:8px;align-items:center}
+.vg .vs{border:3px solid;border-radius:10px;padding:10px;background:#fff;height:100%}
+.vs p{font-size:12px;color:var(--mut)}.vs.hit{animation:hit 1.6s ease-out}
+.ar{text-align:center;font-size:20px;color:var(--mut)}
+@keyframes hit{0%{background:#FFF3B0}100%{background:#fff}}
+@media(max-width:760px){.vg{display:block}.vg .ar{display:none}.vg>div{margin-bottom:8px}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:8px;display:none;max-width:90vw;z-index:9}
+#toast.err{background:var(--TERMINATED)}
+</style></head><body>
+<header><h1>Process Lifecycle Management</h1>
+<div class="hr"><label><input type="checkbox" id="auto"> Automatic scheduler</label><div><span class="mut" style="font-size:12px">OS clock</span><div class="clk" id="clk">00:00:00</div></div></div></header>
+<nav id="nav"></nav>
+<main>
+<section class="pg" id="dash"><div class="grid card" id="tiles"></div>
+<div class="two"><div class="card"><h2>CPU</h2><div id="cpu1"></div></div><div class="card"><h2>Process state distribution</h2><div id="dist"></div></div></div>
+<div class="card"><h2>Recent activity</h2><div id="recent"></div></div></section>
+
+<section class="pg" id="procs"><div class="card"><h2>Create a process</h2>
+<form onsubmit="return false"><label class="f">Process name<input id="n" value="Process A" maxlength="39"></label>
+<label class="f">Priority (1 = highest)<input id="pr" type="number" min="1" max="10" value="2"></label>
+<label class="f">CPU burst (ms)<input id="bu" type="number" min="1" max="1000" value="10"></label>
+<label class="f">Memory (MB)<input id="me" type="number" min="1" value="128"></label>
+<label class="f">Parent PID (optional)<input id="pa" type="number" min="0" value="0"></label>
+<button class="p" id="create">Create process</button></form></div>
+<div class="card"><h2>Process table</h2><div id="tbl"></div></div></section>
+
+<section class="pg" id="viz"><div class="card"><h2>Process state diagram</h2><div class="vg" id="vg"></div>
+<p id="lastt" style="margin-top:12px"></p></div>
+<div class="card"><h2>Valid transitions</h2><p class="mono" style="font-size:13px">NEW → READY · READY → RUNNING · RUNNING → WAITING · WAITING → READY<br>RUNNING → SUSPENDED · READY → SUSPENDED · SUSPENDED → READY · RUNNING → TERMINATED</p>
+<p class="mut">Try an invalid action on the Processes page, for example Run on a TERMINATED process. The backend rejects it.</p></div></section>
+
+<section class="pg" id="pcb"><div class="card"><h2>Select a process</h2><div class="q" id="pick"></div></div><div id="pcbv"></div></section>
+
+<section class="pg" id="sched"><div class="two"><div class="card"><h2>CPU</h2><div id="cpu2"></div></div>
+<div class="card"><h2>Scheduling policy</h2><p>Priority scheduling: the lowest priority number runs first. Ties go to the process that has waited longest in the Ready Queue.</p><p class="mut">Turn the automatic scheduler off in the header to dispatch processes yourself with Run.</p></div></div>
+<div class="card"><h2>Ready Queue</h2><div class="q" id="rq"></div></div>
+<div class="card"><h2>Waiting Queue</h2><div class="q" id="wq"></div></div>
+<div class="card"><h2>Suspended Queue</h2><div class="q" id="sq"></div></div></section>
+
+<section class="pg" id="ana"><div class="grid card" id="atiles"></div>
+<div class="card"><h2>Completed processes</h2><div id="done"></div></div></section>
+
+<section class="pg" id="logs"><div class="card"><h2>Activity log</h2><div id="logt"></div></div></section>
+
+<section class="pg" id="learn"><div class="card"><h2>Process states</h2><div id="states"></div></div>
+<div class="card"><h2>Key ideas</h2>
+<h3>Process</h3><p>A program in execution. The operating system tracks it from creation to termination.</p>
+<h3>Process Control Block (PCB)</h3><p>The record the OS keeps for each process: PID, state, priority, program counter, burst and remaining time, memory, and timestamps. Open the PCB page to inspect one.</p>
+<h3>Scheduling</h3><p>The scheduler picks which READY process gets the CPU. This simulator uses priority scheduling with one CPU.</p>
+<h3>Context switching</h3><p>When the CPU moves from one process to another, the OS saves the old process's PCB state and loads the next one's.</p>
+<h3>Lifecycle</h3><p>NEW → READY → RUNNING → (WAITING → READY, or SUSPENDED → READY) → RUNNING → TERMINATED.</p>
+<h3>Metrics</h3><p>Waiting time is time spent in the Ready Queue. Turnaround time is termination minus arrival. Response time is first run minus arrival. CPU utilization is the share of clock ticks the CPU was busy.</p></div></section>
+</main><div id="toast" role="status"></div>
+<script>
+const $=s=>document.querySelector(s),ST=['NEW','READY','RUNNING','WAITING','SUSPENDED','TERMINATED'];
+const DESC={NEW:'Created, not yet in the Ready Queue.',READY:'Prepared to run, waiting for the CPU.',RUNNING:'Currently using the CPU.',WAITING:'Waiting for an event or resource.',SUSPENDED:'Temporarily removed from active execution.',TERMINATED:'Execution has completed.'};
+const PAGES=[['dash','Dashboard'],['procs','Processes'],['viz','Visualizer'],['pcb','PCB'],['sched','Scheduler'],['ana','Analytics'],['logs','Logs'],['learn','OS Concepts']];
+let S=null,page='dash',sel=null;
+async function api(u,m='GET',b){const r=await fetch(u,{method:m,headers:{'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined});const j=await r.json();if(!r.ok)throw new Error(j.error);return j}
+function toast(t,e){const x=$('#toast');x.textContent=t;x.className=e?'err':'';x.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>x.style.display='none',3500)}
+const fmt=t=>[t/3600|0,t/60%60|0,t%60].map(x=>String(x).padStart(2,'0')).join(':');
+const bd=s=>`<span class="bd" style="background:var(--${s})">${s}</span>`;
+const chip=p=>`<span class="chip" style="border-color:var(--${p.state})" data-a="pcb" data-p="${p.pid}" title="${p.name}">${p.pid}</span>`;
+const nv=v=>v==null||v<0?'—':v;
+const by=s=>S.processes.filter(p=>p.state==s);
+const link=l=>l.length?l.map(chip).join('<i>→</i>'):'<span class="mut">Empty. Create a process to get started.</span>';
+const logrow=e=>`<tr><td class="mono">${fmt(e.timestamp)}</td><td class="mono">${e.pid}</td><td>${e.previousState?bd(e.previousState)+' → ':''}${bd(e.newState)}</td><td>${e.reason}</td></tr>`;
+const logtab=l=>l.length?`<table><tr><th>Time</th><th>PID</th><th>Transition</th><th>Reason</th></tr>${l.map(logrow).join('')}</table>`:'<span class="mut">No activity yet.</span>';
+const cpu=()=>{const r=S.cpu;return r?`<div class="cpu on"><div class="big mono">${r.pid} RUNNING</div><div>${r.name}</div><div class="bar"><i style="width:${100-r.remainingTime*100/r.cpuBurst}%"></i></div>Remaining: ${r.remainingTime} of ${r.cpuBurst} ms</div>`:`<div class="cpu"><div class="big mono">IDLE</div>No process is using the CPU.</div>`};
+const tile=(l,v,c)=>`<div class="tile" style="border-color:var(${c||'--line'})"><span class="mut">${l}</span><b>${v}</b></div>`;
+const tiles=()=>{const s=S.stats,c=s.counts;return tile('Total processes',s.total,'--ink')+ST.slice(1).map(k=>tile(k[0]+k.slice(1).toLowerCase(),c[k],'--'+k)).join('')+tile('CPU utilization',s.cpuUtilization+'%','--ink')+tile('Avg waiting',s.avgWaitingTime+' ms','--ink')+tile('Avg turnaround',s.avgTurnaroundTime+' ms','--ink')};
+const bars=()=>{const c=S.stats.counts,m=Math.max(1,...Object.values(c));return ST.map(k=>`<div class="row"><span>${k}</span><div class="bar"><i style="width:${c[k]*100/m}%;background:var(--${k})"></i></div><b class="mono">${c[k]}</b></div>`).join('')};
+const BT=[['admit','Admit'],['run','Run'],['wait','Wait'],['suspend','Suspend'],['resume','Resume'],['terminate','Terminate']];
+function render(){
+ if(!S)return;$('#clk').textContent=fmt(S.clock);$('#auto').checked=S.auto;
+ if(page=='dash'){$('#tiles').innerHTML=tiles();$('#cpu1').innerHTML=cpu();$('#dist').innerHTML=bars();$('#recent').innerHTML=logtab(S.logs.slice(0,8))}
+ if(page=='procs')$('#tbl').innerHTML=S.processes.length?`<table><tr><th>PID</th><th>Name</th><th>State</th><th>Priority</th><th>Burst</th><th>Left</th><th>Memory</th><th>Actions</th></tr>${S.processes.map(p=>`<tr><td class="mono">${p.pid}</td><td>${p.name}</td><td>${bd(p.state)}</td><td>${p.priority}</td><td>${p.cpuBurst} ms</td><td>${p.remainingTime} ms</td><td>${p.memory} MB</td><td>${BT.map(b=>`<button class="a" data-a="${b[0]}" data-p="${p.pid}">${b[1]}</button>`).join('')}<button class="a" data-a="pcb" data-p="${p.pid}">View PCB</button><button class="a" data-a="del" data-p="${p.pid}" aria-label="Delete ${p.pid}">✕</button></td></tr>`).join('')}</table>`:'<span class="mut">No processes yet. Create one above.</span>';
+ if(page=='viz'){const L=S.logs[0],c=s=>`<div class="vs ${L&&L.newState==s?'hit':''}" style="border-color:var(--${s})"><h3>${s}</h3><p>${DESC[s]}</p><div class="q">${by(s).map(chip).join('')}</div></div>`;
+  const a=(t,r,k)=>`<div class="ar" style="grid-row:${r};grid-column:${k}">${t}</div>`;
+  $('#vg').innerHTML=`<div style="grid-row:1;grid-column:1">${c('NEW')}</div>${a('→',1,2)}<div style="grid-row:1;grid-column:3">${c('READY')}</div>${a('→',1,4)}<div style="grid-row:1;grid-column:5">${c('RUNNING')}</div>${a('→',1,6)}<div style="grid-row:1;grid-column:7">${c('TERMINATED')}</div>${a('⇅',2,3)}${a('↓ ↖',2,5)}<div style="grid-row:3;grid-column:3">${c('SUSPENDED')}</div><div style="grid-row:3;grid-column:5">${c('WAITING')}</div>`;
+  $('#lastt').innerHTML=L?`Last transition: <b class="mono">${L.pid}</b> ${L.previousState||'created'} → ${L.newState} (${L.reason})`:'No transitions yet.'}
+ if(page=='pcb'){$('#pick').innerHTML=link(S.processes);pcb()}
+ if(page=='sched'){$('#cpu2').innerHTML=cpu();$('#rq').innerHTML=link(by('READY').sort((a,b)=>a.priority-b.priority||a.readySince-b.readySince));$('#wq').innerHTML=link(by('WAITING'));$('#sq').innerHTML=link(by('SUSPENDED'))}
+ if(page=='ana'){const s=S.stats,d=by('TERMINATED'),m=Math.max(1,...d.map(p=>p.turnaroundTime));
+  $('#atiles').innerHTML=tile('CPU utilization',s.cpuUtilization+'%','--RUNNING')+tile('Avg waiting',s.avgWaitingTime+' ms','--READY')+tile('Avg turnaround',s.avgTurnaroundTime+' ms','--SUSPENDED')+tile('Avg response',s.avgResponseTime+' ms','--WAITING')+tile('Completed',s.counts.TERMINATED+' / '+s.total,'--TERMINATED');
+  $('#done').innerHTML=d.length?`<table><tr><th>PID</th><th>Burst</th><th>Waiting</th><th>Response</th><th>Completion</th><th>Turnaround</th><th style="width:30%"></th></tr>${d.map(p=>`<tr><td class="mono">${p.pid}</td><td>${p.cpuBurst}</td><td>${p.waitingTime}</td><td>${p.responseTime}</td><td>${p.terminationTime}</td><td>${p.turnaroundTime}</td><td><div class="bar" style="margin:0"><i style="width:${p.turnaroundTime*100/m}%;background:var(--SUSPENDED)"></i></div></td></tr>`).join('')}</table>`:'<span class="mut">No process has finished yet. Run one to completion to see its metrics.</span>'}
+}
+async function pcb(){const p=S.processes.find(x=>x.pid==sel);if(!p){$('#pcbv').innerHTML='';return}
+ const h=await api(`/api/processes/${p.pid}/history`),F=[['PID',p.pid],['Process name',p.name],['State',bd(p.state)],['Priority',p.priority],['Program counter',p.programCounter],['CPU burst',p.cpuBurst+' ms'],['Remaining time',p.remainingTime+' ms'],['Memory',p.memory+' MB'],['Arrival time',fmt(p.arrivalTime)],['Start time',p.startTime<0?'—':fmt(p.startTime)],['Termination time',p.terminationTime<0?'—':fmt(p.terminationTime)],['Parent PID',p.parentPid||'—'],['Waiting time',p.waitingTime+' ms'],['Response time',nv(p.responseTime)],['Turnaround time',nv(p.turnaroundTime)]];
+ $('#pcbv').innerHTML=`<div class="two"><div class="card"><h2>PCB of ${p.pid}</h2><table>${F.map(f=>`<tr><th>${f[0]}</th><td class="mono">${f[1]}</td></tr>`).join('')}</table></div><div class="card"><h2>Timeline and replay</h2><div class="q">${h.map(e=>bd(e.newState)).join('<i>→</i>')}</div><div style="margin-top:12px">${logtab(h)}</div></div></div>`}
+async function refresh(){try{S=await api('/api/state');render()}catch(e){toast('Cannot reach the server. Is ./plms running?',1)}}
+document.addEventListener('click',async e=>{
+ const n=e.target.closest('[data-pg]');if(n){go(n.dataset.pg);return}
+ const b=e.target.closest('[data-a]');if(!b)return;const a=b.dataset.a,p=b.dataset.p;
+ if(a=='pcb'){sel=p;go('pcb');return}
+ try{if(a=='del'){await api('/api/processes/'+p,'DELETE');toast(p+' deleted')}else{await api(`/api/processes/${p}/${a}`,'POST');toast(`${p}: ${a} done`)}}catch(x){toast(x.message,1)}refresh()});
+$('#create').onclick=async()=>{try{const v=i=>$(i).value,j=await api('/api/processes','POST',{name:v('#n'),priority:+v('#pr'),cpuBurst:+v('#bu'),memory:+v('#me'),parentPid:+v('#pa')});toast(`${j.pid} created in NEW state`)}catch(x){toast(x.message,1)}refresh()};
+$('#auto').onchange=async e=>{await api('/api/scheduler','POST',{auto:e.target.checked});toast('Automatic scheduler '+(e.target.checked?'on':'off'));refresh()};
+function go(p){page=p;document.querySelectorAll('.pg').forEach(s=>s.classList.toggle('on',s.id==p));document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.pg==p));if(p=='logs')api('/api/logs').then(l=>$('#logt').innerHTML=logtab(l));render()}
+$('#nav').innerHTML=PAGES.map(p=>`<button data-pg="${p[0]}">${p[1]}</button>`).join('');
+$('#states').innerHTML=ST.map(s=>`<div class="row"><span>${bd(s)}</span><span style="width:auto">${DESC[s]}</span></div>`).join('');
+go('dash');refresh();setInterval(()=>{refresh();if(page=='logs')api('/api/logs').then(l=>$('#logt').innerHTML=logtab(l))},1000);
+</script></body></html>
